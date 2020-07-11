@@ -10,6 +10,10 @@ const TokenSchema = mongoose.Schema({
     type: mongoose.Schema.ObjectId,
     ref: "User",
   },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 module.exports = mongoose.model("TokenWhiteList", TokenSchema);

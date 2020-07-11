@@ -4,8 +4,8 @@ const ErrorResponse = require("../utils/ErrorResponse");
 const AsyncHandler = require("../middleware/async");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const passport = require("passport");
-const { sendTokenCookie, blacklistToken } = require("../utils/auth");
+const bcrypt = require("bcryptjs");
+const { sendTokenCookie } = require("../utils/auth");
 const sendEmail = require("../utils/mail");
 
 /**
@@ -17,18 +17,14 @@ exports.register = AsyncHandler(async (req, res, next) => {
   const { username, email, password, role } = req.body;
 
   //Create a new user
-  const user = await User.create({
+  let user = await User.create({
     username,
     email,
     password,
     role,
   });
 
-  res.status(200).json({
-    success: true,
-  });
-
-  //sendTokenCookie(user, 200, res);
+  sendTokenCookie(user, 200, res);
 });
 
 /**
@@ -59,30 +55,6 @@ exports.login = AsyncHandler(async (req, res, next) => {
 
   sendTokenCookie(user, 200, res);
 });
-
-/* *
- * @desc Facebook login
- * @route GET /api/v1/auth/facebook
- * @acess public
- */
-/* exports.facebook = () => {
-  passport.authenticate("facebook", { session: false, scope: ["email"] });
-}; */
-
-/**
- * @desc Facebook login callback
- * @route GET /api/v1/auth/facebook/callback/
- * @acess public
- */
-/* exports.facebookCb = AsyncHandler(async (req, res, next) => {
-  passport.authenticate("facebook", {
-    session: false,
-    failureRedirect: "/",
-  }),
-    function (req, res) {
-      sendTokenCookie(req.user, 200, res);
-    };
-}); */
 
 /**
  * @desc Gives user a new access token
@@ -230,7 +202,18 @@ exports.resetPassword = AsyncHandler(async (req, res, next) => {
     resetPasswordExpiry: { $gt: Date.now() },
   });
 
-  if (!user) return next(new ErrorResponse("Invalid token", 404));
+  //get user refresh token and blacklist it
+  const refreshToken = user.refreshToken;
+
+  let token = await TokenWhiteList.findOne({
+    refreshToken: refreshToken,
+  });
+
+  if (!token) return next(new ErrorResponse("Token invalid", 403));
+
+  if (token.blacklisted) return next(new ErrorResponse("Logged Out", 403));
+
+  await token.update({ blacklisted: true });
 
   //save new Password
   user.password = req.body.password;
@@ -239,4 +222,30 @@ exports.resetPassword = AsyncHandler(async (req, res, next) => {
   await user.save();
 
   sendTokenCookie(user, 200, res);
+});
+
+//https://security.stackexchange.com/questions/167145/how-to-allow-users-to-connect-from-multiple-devices-with-refresh-tokens
+exports.changePassword = AsyncHandler(async (req, res, next) => {
+  uid = req.body.uid;
+  curPass = req.body.curPass;
+  newPass = req.body.newPass;
+
+  const user = await User.findById(uid).select("+password");
+  if (!user) {
+    return next(new ErrorResponse("Invalid credentials", 401));
+  }
+
+  // Check if password correct
+  const isValid = await user.validatePassword(curPass);
+
+  if (!isValid) {
+    return next(new ErrorResponse("Invalid credentials", 401));
+  }
+
+  const salt = await bcrypt.genSalt(10);
+  newPass = await bcrypt.hash(newPass, salt);
+
+  user.password = newPass;
+
+  await user.save();
 });

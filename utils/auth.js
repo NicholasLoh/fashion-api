@@ -13,6 +13,7 @@ exports.sendTokenCookie = AsyncHandler(async (user, statusCode, res) => {
   //create token
   const token = user.getSignedJwtToken();
 
+  //get new refresh token
   let refreshToken = reqRefreshToken(user);
 
   //add refresh token to white list
@@ -39,39 +40,6 @@ exports.sendTokenCookie = AsyncHandler(async (user, statusCode, res) => {
   });
 
   //res.redirect("http://localhost:5000/api/v1/auth/me");
-});
-
-//blacklist the current refresh token
-exports.blacklistToken = AsyncHandler(async (refreshToken, res, next) => {
-  let token = await TokenWhiteList.findOne({
-    refreshToken: refreshToken,
-  }).populate("user");
-
-  if (!token) return next(new ErrorResponse("Token invalid", 403));
-
-  if (token.blacklisted) return next(new ErrorResponse("Logged Out", 403));
-
-  try {
-    jwt.verify(refreshToken, process.env.JWT_SECRET_REFRESH_KEY);
-
-    let user = await User.findById(token.user._id);
-
-    //check if the user in the refresh token actually have this token
-    if (user.refreshToken === refreshToken) {
-      await user.update({ refreshToken: undefined });
-      await token.update({ blacklisted: true });
-    } else {
-      return next(new ErrorResponse("Unauthorised", 403));
-    }
-
-    res.status(200).json({
-      success: true,
-      token: "",
-    });
-  } catch (error) {
-    console.log(error);
-    return next(new ErrorResponse("Unauthorised", 403));
-  }
 });
 
 //create a new refresh token
