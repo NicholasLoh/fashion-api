@@ -13,6 +13,8 @@ const app = express();
 
 //route files
 const auth = require("./routes/auth");
+const products = require("./routes/product");
+const portfolio = require("./routes/portfolio");
 
 //load env
 dotenv.config({ path: "./config/config.env" });
@@ -64,6 +66,10 @@ const server = app.listen(
 
 //mount auth router
 app.use("/api/v1/auth", auth);
+//mount product router
+app.use("/api/v1/auth", products);
+//mount portfolio router
+app.use("/api/v1/auth", portfolio);
 
 //use errorHandler
 app.use(errorHandler);
